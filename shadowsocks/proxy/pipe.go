@@ -1,23 +1,24 @@
-package shadowsocks
+package proxy
 
 import (
 	"net"
-	"time"
+	"shadowsocks-go/shadowsocks/common"
+	"shadowsocks-go/shadowsocks/log"
 )
 
-func SetReadTimeout(c net.Conn) {
-	if readTimeout != 0 {
-		c.SetReadDeadline(time.Now().Add(readTimeout))
-	}
-}
+//func SetReadTimeout(c net.Conn) {
+//	if readTimeout != 0 {
+//		c.SetReadDeadline(time.Now().Add(readTimeout))
+//	}
+//}
 
 // PipeThenClose copies data from src to dst, closes dst when done.
 func PipeThenClose(src, dst net.Conn, addTraffic func(int)) {
 	defer dst.Close()
-	buf := leakyBuf.Get()
-	defer leakyBuf.Put(buf)
+	buf := common.LB.Get()
+	defer common.LB.Put(buf)
 	for {
-		SetReadTimeout(src)
+		//SetReadTimeout(src)
 		n, err := src.Read(buf)
 		if addTraffic != nil {
 			addTraffic(n)
@@ -27,7 +28,7 @@ func PipeThenClose(src, dst net.Conn, addTraffic func(int)) {
 		if n > 0 {
 			// Note: avoid overwrite err returned by Read.
 			if _, err := dst.Write(buf[0:n]); err != nil {
-				Debug.Println("write:", err)
+				log.Logger.Info("write:", err)
 				break
 			}
 		}

@@ -1,4 +1,4 @@
-package shadowsocks
+package encrypt
 
 import (
 	"crypto/rand"
@@ -14,8 +14,8 @@ func testCipher(t *testing.T, c *Cipher, msg string) {
 	cipherBuf := make([]byte, n)
 	originTxt := make([]byte, n)
 
-	c.encrypt(cipherBuf, []byte(text))
-	c.decrypt(originTxt, cipherBuf)
+	c.Encrypt(cipherBuf, []byte(text))
+	c.Decrypt(originTxt, cipherBuf)
 
 	if string(originTxt) != text {
 		t.Error(msg, "encrypt then decrytp does not get original text")
@@ -44,20 +44,20 @@ func testBlockCipher(t *testing.T, method string) {
 		t.Fatal(method, "NewCipher:", err)
 	}
 	cipherCopy := cipher.Copy()
-	iv, err := cipher.initEncrypt()
+	iv, err := cipher.InitEncrypt()
 	if err != nil {
 		t.Error(method, "initEncrypt:", err)
 	}
-	if err = cipher.initDecrypt(iv); err != nil {
+	if err = cipher.InitDecrypt(iv); err != nil {
 		t.Error(method, "initDecrypt:", err)
 	}
 	testCipher(t, cipher, method)
 
-	iv, err = cipherCopy.initEncrypt()
+	iv, err = cipherCopy.InitEncrypt()
 	if err != nil {
 		t.Error(method, "copy initEncrypt:", err)
 	}
-	if err = cipherCopy.initDecrypt(iv); err != nil {
+	if err = cipherCopy.InitDecrypt(iv); err != nil {
 		t.Error(method, "copy initDecrypt:", err)
 	}
 	testCipher(t, cipherCopy, method+" copy")
@@ -122,7 +122,7 @@ func init() {
 func benchmarkCipherInit(b *testing.B, method string) {
 	ci := cipherMethod[method]
 	key := cipherKey[:ci.keyLen]
-	buf := make([]byte, ci.ivLen)
+	buf := make([]byte, ci.IvLen)
 	for i := 0; i < b.N; i++ {
 		ci.newStream(key, buf, Encrypt)
 	}
@@ -187,7 +187,7 @@ func BenchmarkSalsa20Init(b *testing.B) {
 func benchmarkCipherEncrypt(b *testing.B, method string) {
 	ci := cipherMethod[method]
 	key := cipherKey[:ci.keyLen]
-	iv := cipherIv[:ci.ivLen]
+	iv := cipherIv[:ci.IvLen]
 	enc, err := ci.newStream(key, iv, Encrypt)
 	if err != nil {
 		b.Error(err)
@@ -259,7 +259,7 @@ func BenchmarkSalsa20Encrypt(b *testing.B) {
 func benchmarkCipherDecrypt(b *testing.B, method string) {
 	ci := cipherMethod[method]
 	key := cipherKey[:ci.keyLen]
-	iv := cipherIv[:ci.ivLen]
+	iv := cipherIv[:ci.IvLen]
 	enc, err := ci.newStream(key, iv, Encrypt)
 	if err != nil {
 		b.Error(err)

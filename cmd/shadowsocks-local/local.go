@@ -17,7 +17,7 @@ import (
 	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
 )
 
-var debug ss.DebugLog
+var debug DebugLog
 
 var (
 	errAddrType      = errors.New("socks addr type not supported")

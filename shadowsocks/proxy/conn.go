@@ -1,4 +1,4 @@
-package shadowsocks
+package proxy
 
 import (
 	"encoding/binary"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"shadowsocks-go/shadowsocks/encrypt"
+	"shadowsocks-go/shadowsocks/common"
 )
 
 const (
@@ -14,22 +16,22 @@ const (
 
 type Conn struct {
 	net.Conn
-	*Cipher
+	*encrypt.Cipher
 	readBuf  []byte
 	writeBuf []byte
 }
 
-func NewConn(c net.Conn, cipher *Cipher) *Conn {
+func NewConn(c net.Conn, cipher *encrypt.Cipher) *Conn {
 	return &Conn{
 		Conn:     c,
 		Cipher:   cipher,
-		readBuf:  leakyBuf.Get(),
-		writeBuf: leakyBuf.Get()}
+		readBuf:  common.LB.Get(),
+		writeBuf: common.LB.Get()}
 }
 
 func (c *Conn) Close() error {
-	leakyBuf.Put(c.readBuf)
-	leakyBuf.Put(c.writeBuf)
+	common.LB.Put(c.readBuf)
+	common.LB.Put(c.writeBuf)
 	return c.Conn.Close()
 }
 
@@ -56,7 +58,7 @@ func RawAddr(addr string) (buf []byte, err error) {
 // This is intended for use by users implementing a local socks proxy.
 // rawaddr shoud contain part of the data in socks request, starting from the
 // ATYP field. (Refer to rfc1928 for more information.)
-func DialWithRawAddr(rawaddr []byte, server string, cipher *Cipher) (c *Conn, err error) {
+func DialWithRawAddr(rawaddr []byte, server string, cipher *encrypt.Cipher) (c *Conn, err error) {
 	conn, err := net.Dial("tcp", server)
 	if err != nil {
 		return
@@ -70,7 +72,7 @@ func DialWithRawAddr(rawaddr []byte, server string, cipher *Cipher) (c *Conn, er
 }
 
 // addr should be in the form of host:port
-func Dial(addr, server string, cipher *Cipher) (c *Conn, err error) {
+func Dial(addr, server string, cipher *encrypt.Cipher) (c *Conn, err error) {
 	ra, err := RawAddr(addr)
 	if err != nil {
 		return
@@ -79,28 +81,28 @@ func Dial(addr, server string, cipher *Cipher) (c *Conn, err error) {
 }
 
 func (c *Conn) GetIv() (iv []byte) {
-	iv = make([]byte, len(c.iv))
-	copy(iv, c.iv)
+	iv = make([]byte, len(c.Iv))
+	copy(iv, c.Iv)
 	return
 }
 
 func (c *Conn) GetKey() (key []byte) {
-	key = make([]byte, len(c.key))
-	copy(key, c.key)
+	key = make([]byte, len(c.Key))
+	copy(key, c.Key)
 	return
 }
 
 func (c *Conn) Read(b []byte) (n int, err error) {
-	if c.dec == nil {
-		iv := make([]byte, c.info.ivLen)
+	if c.Dec == nil {
+		iv := make([]byte, c.Info.IvLen)
 		if _, err = io.ReadFull(c.Conn, iv); err != nil {
 			return
 		}
-		if err = c.initDecrypt(iv); err != nil {
+		if err = c.InitDecrypt(iv); err != nil {
 			return
 		}
-		if len(c.iv) == 0 {
-			c.iv = iv
+		if len(c.Iv) == 0 {
+			c.Iv = iv
 		}
 	}
 
@@ -113,15 +115,15 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 
 	n, err = c.Conn.Read(cipherData)
 	if n > 0 {
-		c.decrypt(b[0:n], cipherData[0:n])
+		c.Decrypt(b[0:n], cipherData[0:n])
 	}
 	return
 }
 
 func (c *Conn) Write(b []byte) (n int, err error) {
 	var iv []byte
-	if c.enc == nil {
-		iv, err = c.initEncrypt()
+	if c.Enc == nil {
+		iv, err = c.InitEncrypt()
 		if err != nil {
 			return
 		}
@@ -141,7 +143,7 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 		copy(cipherData, iv)
 	}
 
-	c.encrypt(cipherData[len(iv):], b)
+	c.Encrypt(cipherData[len(iv):], b)
 	n, err = c.Conn.Write(cipherData)
 	return
 }

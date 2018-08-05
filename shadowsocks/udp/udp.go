@@ -1,9 +1,10 @@
-package shadowsocks
+package udp
 
 import (
 	"fmt"
 	"net"
 	"time"
+	"shadowsocks-go/shadowsocks/encrypt"
 )
 
 const (
@@ -18,10 +19,10 @@ var (
 
 type SecurePacketConn struct {
 	net.PacketConn
-	*Cipher
+	*encrypt.Cipher
 }
 
-func NewSecurePacketConn(c net.PacketConn, cipher *Cipher) *SecurePacketConn {
+func NewSecurePacketConn(c net.PacketConn, cipher *encrypt.Cipher) *SecurePacketConn {
 	return &SecurePacketConn{
 		PacketConn: c,
 		Cipher:     cipher,
@@ -40,30 +41,30 @@ func (c *SecurePacketConn) ReadFrom(b []byte) (n int, src net.Addr, err error) {
 		return
 	}
 
-	if n < c.info.ivLen {
+	if n < c.Info.IvLen {
 		return 0, nil, errPacketTooSmall
 	}
 
-	if len(b) < n-c.info.ivLen {
+	if len(b) < n-c.Info.IvLen {
 		err = errBufferTooSmall // just a warning
 	}
 
-	iv := make([]byte, c.info.ivLen)
-	copy(iv, buf[:c.info.ivLen])
+	iv := make([]byte, c.Info.IvLen)
+	copy(iv, buf[:c.Info.IvLen])
 
-	if err = cipher.initDecrypt(iv); err != nil {
+	if err = cipher.InitDecrypt(iv); err != nil {
 		return
 	}
 
-	cipher.decrypt(b[0:], buf[c.info.ivLen:n])
-	n -= c.info.ivLen
+	cipher.Decrypt(b[0:], buf[c.Info.IvLen:n])
+	n -= c.Info.IvLen
 
 	return
 }
 
 func (c *SecurePacketConn) WriteTo(b []byte, dst net.Addr) (n int, err error) {
 	cipher := c.Copy()
-	iv, err := cipher.initEncrypt()
+	iv, err := cipher.InitEncrypt()
 	if err != nil {
 		return
 	}
@@ -72,7 +73,7 @@ func (c *SecurePacketConn) WriteTo(b []byte, dst net.Addr) (n int, err error) {
 	cipherData := make([]byte, packetLen)
 	copy(cipherData, iv)
 
-	cipher.encrypt(cipherData[len(iv):], b)
+	cipher.Encrypt(cipherData[len(iv):], b)
 	n, err = c.PacketConn.WriteTo(cipherData, dst)
 	return
 }

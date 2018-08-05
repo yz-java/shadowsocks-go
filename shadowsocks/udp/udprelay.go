@@ -1,4 +1,4 @@
-package shadowsocks
+package udp
 
 import (
 	"encoding/binary"
@@ -9,6 +9,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"shadowsocks-go/shadowsocks/common"
+	"shadowsocks-go/shadowsocks/log"
 )
 
 const (
@@ -133,8 +135,8 @@ func parseHeaderFromAddr(addr net.Addr) ([]byte, int) {
 }
 
 func Pipeloop(write net.PacketConn, writeAddr net.Addr, readClose net.PacketConn, addTraffic func(int)) {
-	buf := leakyBuf.Get()
-	defer leakyBuf.Put(buf)
+	buf := common.LB.Get()
+	defer common.LB.Put(buf)
 	defer readClose.Close()
 	for {
 		readClose.SetDeadline(time.Now().Add(udpTimeout))
@@ -144,10 +146,10 @@ func Pipeloop(write net.PacketConn, writeAddr net.Addr, readClose net.PacketConn
 				if ne.Err == syscall.EMFILE || ne.Err == syscall.ENFILE {
 					// log too many open file error
 					// EMFILE is process reaches open file limits, ENFILE is system limit
-					Debug.Println("[udp]read error:", err)
+					log.Logger.Info("[udp]read error:", err)
 				}
 			}
-			Debug.Printf("[udp]closed pipe %s<-%s\n", writeAddr, readClose.LocalAddr())
+			log.Logger.Debug("[udp]closed pipe %s<-%s\n", writeAddr, readClose.LocalAddr())
 			return
 		}
 		// need improvement here
@@ -166,25 +168,25 @@ func handleUDPConnection(handle *SecurePacketConn, n int, src net.Addr, receive 
 	var dstIP net.IP
 	var reqLen int
 	addrType := receive[idType]
-	defer leakyBuf.Put(receive)
+	defer common.LB.Put(receive)
 
-	switch addrType & AddrMask {
+	switch addrType & common.AddrMask {
 	case typeIPv4:
 		reqLen = lenIPv4
 		if len(receive) < reqLen {
-			Debug.Println("[udp]invalid received message.")
+			log.Logger.Debug("[udp]invalid received message.")
 		}
 		dstIP = net.IP(receive[idIP0 : idIP0+net.IPv4len])
 	case typeIPv6:
 		reqLen = lenIPv6
 		if len(receive) < reqLen {
-			Debug.Println("[udp]invalid received message.")
+			log.Logger.Debug("[udp]invalid received message.")
 		}
 		dstIP = net.IP(receive[idIP0 : idIP0+net.IPv6len])
 	case typeDm:
 		reqLen = int(receive[idDmLen]) + lenDmBase
 		if len(receive) < reqLen {
-			Debug.Println("[udp]invalid received message.")
+			log.Logger.Debug("[udp]invalid received message.")
 		}
 		name := string(receive[idDm0 : idDm0+int(receive[idDmLen])])
 		// avoid panic: syscall: string with NUL passed to StringToUTF16 on windows.
@@ -194,12 +196,12 @@ func handleUDPConnection(handle *SecurePacketConn, n int, src net.Addr, receive 
 		}
 		dIP, err := net.ResolveIPAddr("ip", name) // carefully with const type
 		if err != nil {
-			Debug.Printf("[udp]failed to resolve domain name: %s\n", string(receive[idDm0:idDm0+receive[idDmLen]]))
+			log.Logger.Debug("[udp]failed to resolve domain name: %s\n", string(receive[idDm0:idDm0+receive[idDmLen]]))
 			return
 		}
 		dstIP = dIP.IP
 	default:
-		Debug.Printf("[udp]addrType %d not supported", addrType)
+		log.Logger.Debug("[udp]addrType %d not supported", addrType)
 		return
 	}
 	dst := &net.UDPAddr{
@@ -217,13 +219,13 @@ func handleUDPConnection(handle *SecurePacketConn, n int, src net.Addr, receive 
 		return
 	}
 	if !exist {
-		Debug.Printf("[udp]new client %s->%s via %s\n", src, dst, remote.LocalAddr())
+		log.Logger.Debug("[udp]new client %s->%s via %s\n", src, dst, remote.LocalAddr())
 		go func() {
 			Pipeloop(handle, src, remote, addTraffic)
 			natlist.Delete(src.String())
 		}()
 	} else {
-		Debug.Printf("[udp]using cached client %s->%s via %s\n", src, dst, remote.LocalAddr())
+		log.Logger.Info("[udp]using cached client %s->%s via %s\n", src, dst, remote.LocalAddr())
 	}
 	if remote == nil {
 		fmt.Println("WTF")
@@ -235,9 +237,9 @@ func handleUDPConnection(handle *SecurePacketConn, n int, src net.Addr, receive 
 		if ne, ok := err.(*net.OpError); ok && (ne.Err == syscall.EMFILE || ne.Err == syscall.ENFILE) {
 			// log too many open file error
 			// EMFILE is process reaches open file limits, ENFILE is system limit
-			Debug.Println("[udp]write error:", err)
+			log.Logger.Debug("[udp]write error:", err)
 		} else {
-			Debug.Println("[udp]error connecting to:", dst, err)
+			log.Logger.Debug("[udp]error connecting to:", dst, err)
 		}
 		if conn := natlist.Delete(src.String()); conn != nil {
 			conn.Close()
@@ -248,7 +250,7 @@ func handleUDPConnection(handle *SecurePacketConn, n int, src net.Addr, receive 
 }
 
 func ReadAndHandleUDPReq(c *SecurePacketConn, addTraffic func(int)) error {
-	buf := leakyBuf.Get()
+	buf := common.LB.Get()
 	n, src, err := c.ReadFrom(buf[0:])
 	if err != nil {
 		return err

@@ -5,7 +5,7 @@
  * Time: 上午10:31
  * To change this template use File | Settings | File Templates.
  */
-package shadowsocks
+package config
 
 import (
 	"encoding/json"
@@ -16,6 +16,11 @@ import (
 	"reflect"
 	"time"
 )
+
+var SanitizeIps = false
+var Udp = false
+var ManagerAddr = ""
+var SysConfig *Config
 
 type Config struct {
 	Server       interface{} `json:"server"`
@@ -87,10 +92,6 @@ func ParseConfig(path string) (config *Config, err error) {
 	}
 	readTimeout = time.Duration(config.Timeout) * time.Second
 	return
-}
-
-func SetDebug(d DebugLog) {
-	Debug = d
 }
 
 // Useful for command line to override options specified in config file

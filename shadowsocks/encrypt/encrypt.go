@@ -1,4 +1,4 @@
-package shadowsocks
+package encrypt
 
 import (
 	"crypto/aes"
@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/blowfish"
 	"golang.org/x/crypto/cast5"
 	"golang.org/x/crypto/salsa20/salsa"
+	"shadowsocks-go/shadowsocks/common"
 )
 
 var errEmptyPassword = errors.New("empty key")
@@ -121,9 +122,9 @@ func (c *salsaStreamCipher) XORKeyStream(dst, src []byte) {
 	dataSize := len(src) + padLen
 	if cap(dst) >= dataSize {
 		buf = dst[:dataSize]
-	} else if leakyBufSize >= dataSize {
-		buf = leakyBuf.Get()
-		defer leakyBuf.Put(buf)
+	} else if common.LeakyBufSize >= dataSize {
+		buf = common.LB.Get()
+		defer common.LB.Put(buf)
 		buf = buf[:dataSize]
 	} else {
 		buf = make([]byte, dataSize)
@@ -151,7 +152,7 @@ func newSalsa20Stream(key, iv []byte, _ DecOrEnc) (cipher.Stream, error) {
 
 type cipherInfo struct {
 	keyLen    int
-	ivLen     int
+	IvLen     int
 	newStream func(key, iv []byte, doe DecOrEnc) (cipher.Stream, error)
 }
 
@@ -184,11 +185,11 @@ func CheckCipherMethod(method string) error {
 }
 
 type Cipher struct {
-	enc  cipher.Stream
-	dec  cipher.Stream
-	key  []byte
-	info *cipherInfo
-	iv   []byte
+	Enc  cipher.Stream
+	Dec  cipher.Stream
+	Key  []byte
+	Info *cipherInfo
+	Iv   []byte
 }
 
 // NewCipher creates a cipher that can be used in Dial() etc.
@@ -205,7 +206,7 @@ func NewCipher(method, password string) (c *Cipher, err error) {
 
 	key := evpBytesToKey(password, mi.keyLen)
 
-	c = &Cipher{key: key, info: mi}
+	c = &Cipher{Key: key, Info: mi}
 
 	if err != nil {
 		return nil, err
@@ -214,31 +215,31 @@ func NewCipher(method, password string) (c *Cipher, err error) {
 }
 
 // Initializes the block cipher with CFB mode, returns IV.
-func (c *Cipher) initEncrypt() (iv []byte, err error) {
-	if c.iv == nil {
-		iv = make([]byte, c.info.ivLen)
+func (c *Cipher) InitEncrypt() (iv []byte, err error) {
+	if c.Iv == nil {
+		iv = make([]byte, c.Info.IvLen)
 		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
 			return nil, err
 		}
-		c.iv = iv
+		c.Iv = iv
 	} else {
-		iv = c.iv
+		iv = c.Iv
 	}
-	c.enc, err = c.info.newStream(c.key, iv, Encrypt)
+	c.Enc, err = c.Info.newStream(c.Key, iv, Encrypt)
 	return
 }
 
-func (c *Cipher) initDecrypt(iv []byte) (err error) {
-	c.dec, err = c.info.newStream(c.key, iv, Decrypt)
+func (c *Cipher) InitDecrypt(iv []byte) (err error) {
+	c.Dec, err = c.Info.newStream(c.Key, iv, Decrypt)
 	return
 }
 
-func (c *Cipher) encrypt(dst, src []byte) {
-	c.enc.XORKeyStream(dst, src)
+func (c *Cipher) Encrypt(dst, src []byte) {
+	c.Enc.XORKeyStream(dst, src)
 }
 
-func (c *Cipher) decrypt(dst, src []byte) {
-	c.dec.XORKeyStream(dst, src)
+func (c *Cipher) Decrypt(dst, src []byte) {
+	c.Dec.XORKeyStream(dst, src)
 }
 
 // Copy creates a new cipher at it's initial state.
@@ -257,7 +258,7 @@ func (c *Cipher) Copy() *Cipher {
 	// the nature of the algorithm.)
 
 	nc := *c
-	nc.enc = nil
-	nc.dec = nil
+	nc.Enc = nil
+	nc.Dec = nil
 	return &nc
 }

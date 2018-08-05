@@ -1,4 +1,4 @@
-package shadowsocks
+package proxy
 
 import (
 	"errors"
@@ -6,10 +6,21 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"shadowsocks-go/shadowsocks/encrypt"
 )
 
+//type NetworkProxy interface {
+//	//运行代理
+//	Run(port,password string)
+//
+//	handleConnection(conn *Conn,port string)
+//
+//	//停止
+//	Stop(port string)
+//}
+
 type Dialer struct {
-	cipher *Cipher
+	cipher *encrypt.Cipher
 	server string
 	support_udp bool
 }
@@ -26,7 +37,7 @@ type ProxyAddr struct {
 
 var ErrNilCipher = errors.New("cipher can't be nil")
 
-func NewDialer(server string, cipher *Cipher) (dialer *Dialer, err error) {
+func NewDialer(server string, cipher *encrypt.Cipher) (dialer *Dialer, err error) {
 	// Currently shadowsocks-go do not support UDP
 	if cipher == nil {
 		return nil, ErrNilCipher

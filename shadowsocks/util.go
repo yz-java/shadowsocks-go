@@ -4,13 +4,13 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"errors"
-	"fmt"
 	"os"
+	"shadowsocks-go/shadowsocks/log"
 )
 
 func PrintVersion() {
 	const version = "1.2.2"
-	fmt.Println("shadowsocks-go version", version)
+	log.Logger.Info("shadowsocks-go version", version)
 }
 
 func IsFileExists(path string) (bool, error) {
